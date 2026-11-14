@@ -31,6 +31,21 @@ export function BottomNav() {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => {
+                  const alertData = {
+                    id: `help-${Date.now()}`,
+                    type: "help",
+                    message: "EMERGENCY: Amma tapped the Emergency Help button!",
+                  };
+                  try {
+                    const channel = new BroadcastChannel("carecompanion_alerts");
+                    channel.postMessage(alertData);
+                    channel.close();
+                  } catch {}
+                  try {
+                    localStorage.setItem("cc_latest_alert", JSON.stringify(alertData));
+                  } catch {}
+                }}
                 className={`flex flex-col items-center justify-center min-h-[64px] transition active:scale-95 cursor-pointer touch-manipulation select-none ${
                   isActive
                     ? "bg-red-700 text-white"

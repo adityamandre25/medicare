@@ -59,6 +59,16 @@ export default function PatientTodayTimelinePage() {
     const target = instances.find((i) => i.id === id);
     if (target?.tasks) {
       speech.speak(`Marked ${target.tasks.title} as done. Well done, ${displayName}.`);
+      fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          senderRole: "patient",
+          senderName: displayName,
+          kind: "text",
+          body: `Completed: ${displayName} has marked '${target.tasks.title}' as done.`,
+        }),
+      }).catch(() => {});
     }
   };
 

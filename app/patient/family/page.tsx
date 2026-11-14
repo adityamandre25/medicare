@@ -110,10 +110,24 @@ export default function PatientFamilyPage() {
     }, 4500);
   };
 
-  const handleSendMessage = (member: FamilyMember, msg: string) => {
+  const handleSendMessage = async (member: FamilyMember, msg: string) => {
     const speechText = `Message sent to ${member.name}: "${msg}"`;
     speech.speak(speechText);
     setSentMessage(speechText);
+
+    try {
+      await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          senderRole: "patient",
+          senderName: "Amma",
+          kind: "preset",
+          body: `Amma to ${member.name}: "${msg}"`,
+        }),
+      });
+    } catch {}
+
     setTimeout(() => {
       setSentMessage(null);
     }, 4000);

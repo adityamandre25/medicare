@@ -9,14 +9,43 @@ import { BigButton } from "@/components/ui/BigButton";
 export default function PatientHelpPage() {
   const [stage, setStage] = useState<"initial" | "confirm" | "sent">("initial");
 
+  const broadcastAlert = (message: string) => {
+    const alertData = {
+      id: `help-${Date.now()}`,
+      type: "help" as const,
+      message,
+    };
+    try {
+      const channel = new BroadcastChannel("carecompanion_alerts");
+      channel.postMessage(alertData);
+      channel.close();
+    } catch {}
+    try {
+      localStorage.setItem("cc_latest_alert", JSON.stringify(alertData));
+    } catch {}
+  };
+
   const handleInitialClick = () => {
     speech.speak("Do you need help? Tap Yes to tell your family.");
     setStage("confirm");
+    broadcastAlert("EMERGENCY: Amma clicked the Emergency Alert button!");
   };
 
-  const handleConfirmHelp = () => {
+  const handleConfirmHelp = async () => {
     speech.speak("Help is on the way. Your family has been told.");
     setStage("sent");
+    broadcastAlert("URGENT EMERGENCY: Amma confirmed she needs help right now!");
+
+    try {
+      await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "help",
+          message: "URGENT EMERGENCY: Amma confirmed she needs help right now!",
+        }),
+      });
+    } catch {}
   };
 
   const handleCancel = () => {

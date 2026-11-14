@@ -57,6 +57,19 @@ export default function PatientHomePage() {
 
     const target = instances.find((i) => i.id === instanceId);
     speech.speak(`Well done, ${patientName}. Task completed.`);
+
+    if (target?.tasks?.title) {
+      fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          senderRole: "patient",
+          senderName: patientName,
+          kind: "text",
+          body: `Completed: ${patientName} has completed '${target.tasks.title}'.`,
+        }),
+      }).catch(() => {});
+    }
   };
 
   const handleSnooze = (instanceId: string) => {

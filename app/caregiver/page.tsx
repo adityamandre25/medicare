@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { RenderTaskIcon } from "@/components/caregiver/IconPicker";
+import { AlertBanner, AlertItem } from "@/components/caregiver/AlertBanner";
 import { formatTaskTime } from "@/lib/time";
 import {
   Heart,
@@ -15,37 +16,69 @@ import {
   AlertTriangle,
   ExternalLink,
   ChevronRight,
+  Pill,
 } from "lucide-react";
 
 export default function CaregiverDashboardPage() {
   const [tasks, setTasks] = useState<any[]>([]);
   const [patient, setPatient] = useState<{ id: string; display_name: string } | null>(null);
   const [doneCount, setDoneCount] = useState(0);
+  const [activeAlerts, setActiveAlerts] = useState<AlertItem[]>([]);
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const res = await fetch("/api/tasks");
-        const data = await res.json();
+  const loadData = async () => {
+    try {
+      const [tasksRes, alertsRes] = await Promise.all([
+        fetch("/api/tasks"),
+        fetch("/api/alerts"),
+      ]);
+
+      if (tasksRes.ok) {
+        const data = await tasksRes.json();
         if (data.tasks) {
           setTasks(data.tasks);
           setPatient(data.patient);
         }
+      }
 
-        // Read local instances if any completed
-        const cached = localStorage.getItem("cc_today_instances");
-        if (cached) {
-          const list = JSON.parse(cached);
-          const completed = list.filter((i: any) => i.status === "done").length;
-          setDoneCount(completed);
+      if (alertsRes.ok) {
+        const alertData = await alertsRes.json();
+        if (alertData.activeAlerts) {
+          setActiveAlerts(alertData.activeAlerts);
         }
-      } catch {}
-    }
+      }
+
+      // Read local instances if any completed
+      const cached = localStorage.getItem("cc_today_instances");
+      if (cached) {
+        const list = JSON.parse(cached);
+        const completed = list.filter((i: any) => i.status === "done").length;
+        setDoneCount(completed);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
     loadData();
+    const interval = setInterval(loadData, 15000); // live sync
+    return () => clearInterval(interval);
   }, []);
+
+  const handleResolveAlert = async (alertId: string) => {
+    try {
+      const res = await fetch("/api/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "resolve", alertId }),
+      });
+      if (res.ok) {
+        setActiveAlerts((prev) => prev.filter((a) => a.id !== alertId));
+      }
+    } catch {}
+  };
 
   const totalCount = tasks.length || 11;
   const patientDisplayName = patient?.display_name || "Amma";
+  const missedMedicineAlerts = activeAlerts.filter((a: any) => a.is_medicine);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
@@ -73,9 +106,12 @@ export default function CaregiverDashboardPage() {
             </Link>
             <Link
               href="/caregiver/messages"
-              className="text-gray-600 hover:text-gray-900 cursor-pointer touch-manipulation"
+              className="relative text-gray-600 hover:text-gray-900 cursor-pointer touch-manipulation flex items-center gap-1.5"
             >
-              Messages
+              <span>Messages</span>
+              {activeAlerts.length > 0 && (
+                <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse" />
+              )}
             </Link>
             <Link
               href="/caregiver/settings"
@@ -89,7 +125,7 @@ export default function CaregiverDashboardPage() {
 
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900">
@@ -100,7 +136,7 @@ export default function CaregiverDashboardPage() {
               </span>
             </div>
             <p className="text-sm text-gray-500 mt-1">
-              Live status of daily routine and patient alerts.
+              Live status of daily routine, missed tablet alerts, and patient reassurance.
             </p>
           </div>
 
@@ -114,6 +150,20 @@ export default function CaregiverDashboardPage() {
             </Link>
           </div>
         </div>
+
+        {/* Real-time Alert Banners if any active alerts */}
+        {activeAlerts.length > 0 && (
+          <div className="mb-8 space-y-3">
+            {activeAlerts.map((alert) => (
+              <AlertBanner
+                key={alert.id}
+                alert={alert}
+                patientName={patientDisplayName}
+                onResolve={handleResolveAlert}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Summary Metric Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -130,13 +180,49 @@ export default function CaregiverDashboardPage() {
             </p>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+          <div
+            className={`p-6 rounded-2xl border shadow-sm transition ${
+              missedMedicineAlerts.length > 0
+                ? "bg-red-50/70 border-red-300"
+                : activeAlerts.length > 0
+                ? "bg-amber-50/70 border-amber-300"
+                : "bg-white border-gray-200"
+            }`}
+          >
             <div className="flex items-center justify-between text-gray-500 mb-2">
               <span className="text-sm font-semibold">Active Alerts</span>
-              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              {missedMedicineAlerts.length > 0 ? (
+                <Pill className="w-5 h-5 text-red-600 animate-pulse" />
+              ) : (
+                <AlertTriangle
+                  className={`w-5 h-5 ${
+                    activeAlerts.length > 0 ? "text-amber-500" : "text-gray-400"
+                  }`}
+                />
+              )}
             </div>
-            <p className="text-3xl font-extrabold text-green-700">All Clear</p>
-            <p className="text-xs text-gray-500 mt-1">No emergency help requests</p>
+            {activeAlerts.length > 0 ? (
+              <>
+                <p
+                  className={`text-3xl font-extrabold ${
+                    missedMedicineAlerts.length > 0 ? "text-red-700" : "text-amber-800"
+                  }`}
+                >
+                  {activeAlerts.length} Active {activeAlerts.length === 1 ? "Alert" : "Alerts"}
+                </p>
+                <Link
+                  href="/caregiver/messages"
+                  className="text-xs font-bold text-red-700 hover:underline mt-1 block"
+                >
+                  View in Messages &rarr;
+                </Link>
+              </>
+            ) : (
+              <>
+                <p className="text-3xl font-extrabold text-green-700">All Clear</p>
+                <p className="text-xs text-gray-500 mt-1">All scheduled tasks on track</p>
+              </>
+            )}
           </div>
 
           <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
@@ -218,8 +304,8 @@ export default function CaregiverDashboardPage() {
               className="p-4 rounded-xl border border-gray-200 hover:bg-gray-50 flex flex-col gap-2 transition active:scale-95 cursor-pointer touch-manipulation"
             >
               <MessageSquare className="w-6 h-6 text-[#3B82F6]" />
-              <span className="font-bold text-sm text-gray-900">Messages</span>
-              <span className="text-xs text-gray-500">Preset replies & chat</span>
+              <span className="font-bold text-sm text-gray-900">Messages & Alerts</span>
+              <span className="text-xs text-gray-500">Missed tablets & chat</span>
             </Link>
             <Link
               href="/caregiver/settings"
